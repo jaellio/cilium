@@ -1,0 +1,86 @@
+// Copyright Istio Authors
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package istio.workload;
+option go_package="pkg/workloadapi";
+
+// Workload represents a workload - an endpoint (or collection behind a hostname).
+// The xds primary key is "uid" as defined on the workload below.
+// Secondary (alias) keys are the unique `network/IP` pairs that the workload can be reached at.
+message Workload {
+  // UID represents a globally unique opaque identifier for this workload.
+  // For k8s resources, it is recommended to use the more readable format:
+  //
+  // cluster/group/kind/namespace/name/section-name
+  //
+  // As an example, a ServiceEntry with two WorkloadEntries inlined could become
+  // two Workloads with the following UIDs:
+  // - cluster1/networking.istio.io/v1alpha3/ServiceEntry/default/external-svc/endpoint1
+  // - cluster1/networking.istio.io/v1alpha3/ServiceEntry/default/external-svc/endpoint2
+  //
+  // For VMs and other workloads other formats are also supported; for example,
+  // a single UID string: "0ae5c03d-5fb3-4eb9-9de8-2bd4b51606ba"
+  string uid = 20;
+  // Name represents the name for the workload.
+  // For Kubernetes, this is the pod name.
+  // This is just for debugging and may be elided as an optimization.
+  string name = 1;
+  // Namespace represents the namespace for the workload.
+  // This is just for debugging and may be elided as an optimization.
+  string namespace = 2;
+
+  // Address represents the IPv4/IPv6 address for the workload.
+  // This should be globally unique.
+  // This should not have a port number.
+  // Each workload must have at least either an address or hostname; not both.
+  repeated bytes addresses = 3;
+
+  // Protocol that should be used to connect to this workload.
+  TunnelProtocol tunnel_protocol = 5;
+
+  // The SPIFFE identity of the workload. The identity is joined to form spiffe://<trust_domain>/ns/<namespace>/sa/<service_account>.
+  // TrustDomain of the workload. May be elided if this is the mesh wide default (typically cluster.local)
+  string trust_domain = 6;
+  // ServiceAccount of the workload. May be elided if this is "default"
+  string service_account = 7;
+
+  // Name of the node the workload runs on
+  string node = 9;
+}
+
+enum WorkloadStatus {
+  // Workload is healthy and ready to serve traffic.
+  HEALTHY = 0;
+  // Workload is unhealthy and NOT ready to serve traffic.
+  UNHEALTHY = 1;
+}
+
+enum WorkloadType {
+  DEPLOYMENT = 0;
+  CRONJOB = 1;
+  POD = 2;
+  JOB = 3;
+}
+
+// TunnelProtocol indicates the tunneling protocol for requests.
+enum TunnelProtocol {
+  // NONE means requests should be forwarded as-is, without tunneling.
+  NONE = 0;
+  // HBONE means requests should be tunneled over HTTP.
+  // This does not dictate HTTP/1.1 vs HTTP/2; ALPN should be used for that purpose.
+  HBONE = 1;
+  // Future options may include things like QUIC/HTTP3, etc.
+}
