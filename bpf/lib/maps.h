@@ -64,6 +64,15 @@ struct {
 } THROTTLE_MAP __section_maps_btf;
 #endif /* ENABLE_BANDWIDTH_MANAGER */
 
+struct bpf_elf_map __section_maps LOCAL_REDIRECT_MAP = {
+	.type		= BPF_MAP_TYPE_HASH,
+	.size_key	= sizeof(struct local_redirect_key),
+	.size_value	= sizeof(struct local_redirect_info),
+	.pinning	= PIN_GLOBAL_NS,
+	.max_elem	= LOCAL_REDIRECT_MAP_SIZE,
+	.flags		= BPF_F_NO_PREALLOC,
+};
+
 #ifdef POLICY_MAP
 /* Per-endpoint policy enforcement map */
 struct {

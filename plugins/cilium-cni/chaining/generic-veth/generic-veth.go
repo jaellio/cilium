@@ -7,7 +7,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
+	"github.com/cilium/cilium/pkg/sysctl"
 	cniTypes "github.com/containernetworking/cni/pkg/types"
 	cniTypesVer "github.com/containernetworking/cni/pkg/types/100"
 	cniVersion "github.com/containernetworking/cni/pkg/version"
@@ -173,6 +175,15 @@ func (f *GenericVethChainer) Add(ctx context.Context, pluginCtx chainingapi.Plug
 		return
 	case vethHostIdx == 0:
 		err = errors.New("unable to determine index interface of veth pair on the host side")
+		return
+	}
+
+	// If there is "." in the ifName, must replace it with "/" so sysctl can handle it.
+	nomalizedName := strings.ReplaceAll(vethHostName, ".", "/")
+	if err = sysctl.Disable(fmt.Sprintf("net.ipv4.conf.%s.rp_filter", nomalizedName)); err != nil {
+		return
+	}
+	if err = sysctl.Disable(fmt.Sprintf("net.ipv4.conf.all.rp_filter")); err != nil {
 		return
 	}
 

@@ -20,7 +20,7 @@ int cil_from_network(struct __ctx_buff *ctx)
 	enum trace_reason reason = TRACE_REASON_UNKNOWN;
 	enum trace_point obs_point_to = TRACE_TO_STACK;
 	enum trace_point obs_point_from = TRACE_FROM_NETWORK;
-
+  printk("cil_from_network %d->%d, %pI4", ctx->ifindex, ctx->ingress_ifindex, &ctx->local_ip4);
 	bpf_clear_meta(ctx);
 
 	/* This program should be attached to the tc-ingress of

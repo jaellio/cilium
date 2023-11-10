@@ -14,6 +14,7 @@ import (
 	"github.com/cilium/cilium/pkg/maps/fragmap"
 	ipcachemap "github.com/cilium/cilium/pkg/maps/ipcache"
 	"github.com/cilium/cilium/pkg/maps/lbmap"
+	"github.com/cilium/cilium/pkg/maps/localredirect"
 	"github.com/cilium/cilium/pkg/maps/lxcmap"
 	"github.com/cilium/cilium/pkg/maps/metricsmap"
 	"github.com/cilium/cilium/pkg/maps/neighborsmap"
@@ -107,6 +108,8 @@ func init() {
 		"edt_info":               {bwmap.EdtInfo{}},
 		"egress_gw_policy_key":   {egressmap.EgressPolicyKey4{}},
 		"egress_gw_policy_entry": {egressmap.EgressPolicyVal4{}},
+		"local_redirect_key":     {localredirect.LocalRedirectKey{}},
+		"local_redirect_info":    {localredirect.LocalRedirectInfo{}},
 		"srv6_vrf_key4":          {srv6map.VRFKey4{}},
 		"srv6_vrf_key6":          {srv6map.VRFKey6{}},
 		"srv6_policy_key4":       {srv6map.PolicyKey4{}},

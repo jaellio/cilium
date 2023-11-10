@@ -12,6 +12,8 @@ import (
 	"runtime"
 	"sync"
 
+	"github.com/cilium/cilium/pkg/maps/localredirect"
+	"github.com/cilium/cilium/pkg/types"
 	"github.com/go-openapi/runtime/middleware"
 	"github.com/sirupsen/logrus"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -20,6 +22,7 @@ import (
 	. "github.com/cilium/cilium/api/v1/server/restapi/endpoint"
 	"github.com/cilium/cilium/daemon/restapi"
 	"github.com/cilium/cilium/pkg/api"
+	"github.com/cilium/cilium/pkg/byteorder"
 	"github.com/cilium/cilium/pkg/datapath/linux/bandwidth"
 	"github.com/cilium/cilium/pkg/endpoint"
 	endpointid "github.com/cilium/cilium/pkg/endpoint/id"
@@ -439,6 +442,30 @@ func (d *Daemon) createEndpoint(ctx context.Context, owner regeneration.Owner, e
 			ep.SetK8sMetadata(cp)
 			addLabels.MergeLabels(identityLabels)
 			infoLabels.MergeLabels(info)
+			log.WithField("identityLabel", identityLabels).Info("in cmd.createEndpoint")
+			switch identityLabels["redir-type"].Value {
+			case "workload":
+				localAddress := byteorder.Native.Uint32(ep.IPv4.AsSlice())
+				log.WithField("redir-type", "workload").Infof("found redir-workload with address %s(%d)", ep.IPv4Address(), localAddress)
+				var epMac types.MACAddr
+				for i, b := range ep.LXCMac() {
+					epMac[i] = b
+				}
+				localredirect.LocalRedirectMap.Update(
+					&localredirect.LocalRedirectKey{Id: uint64(localAddress)},
+					&localredirect.LocalRedirectInfo{IfIndex: uint16(ep.GetIfIndex()), IfMac: epMac},
+				)
+			case "proxy":
+				log.WithField("redir-type", "proxy").Infof("found redir-proxy")
+				var epMac types.MACAddr
+				for i, b := range ep.LXCMac() {
+					epMac[i] = b
+				}
+				localredirect.LocalRedirectMap.Update(
+					&localredirect.LocalRedirectKey{Id: 42},
+					&localredirect.LocalRedirectInfo{IfIndex: uint16(ep.GetIfIndex()), IfMac: epMac},
+				)
+			}
 			if _, ok := annotations[bandwidth.IngressBandwidth]; ok {
 				log.WithFields(logrus.Fields{
 					logfields.K8sPodName:  epTemplate.K8sNamespace + "/" + epTemplate.K8sPodName,

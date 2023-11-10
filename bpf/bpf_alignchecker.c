@@ -73,6 +73,8 @@ add_type(struct egress_gw_policy_key);
 add_type(struct egress_gw_policy_entry);
 add_type(struct vtep_key);
 add_type(struct vtep_value);
+add_type(struct local_redirect_key);
+add_type(struct local_redirect_info);
 add_type(struct capture4_wcard);
 add_type(struct capture6_wcard);
 add_type(struct capture_rule);

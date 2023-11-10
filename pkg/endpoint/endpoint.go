@@ -17,6 +17,7 @@ import (
 	"strings"
 	"sync/atomic"
 
+	"github.com/cilium/cilium/pkg/byteorder"
 	"github.com/sirupsen/logrus"
 
 	k8sTypes "k8s.io/apimachinery/pkg/types"
@@ -47,6 +48,7 @@ import (
 	"github.com/cilium/cilium/pkg/logging/logfields"
 	"github.com/cilium/cilium/pkg/mac"
 	"github.com/cilium/cilium/pkg/maps/ctmap"
+	"github.com/cilium/cilium/pkg/maps/localredirect"
 	"github.com/cilium/cilium/pkg/maps/lxcmap"
 	"github.com/cilium/cilium/pkg/maps/policymap"
 	"github.com/cilium/cilium/pkg/metrics"
@@ -1733,6 +1735,36 @@ func (e *Endpoint) ModifyIdentityLabels(addLabels, delLabels labels.Labels) erro
 
 		e.identityRevision++
 		rev = e.identityRevision
+		switch addLabels["redir-type"].Value {
+		case "workload":
+			localAddress := byteorder.Native.Uint32(e.IPv4.AsSlice())
+			log.WithField("redir-type", "workload").Info("updating redir-workload with address %s(%d)", e.IPv4Address(), localAddress)
+			var epMac types.MACAddr
+			for i, b := range e.LXCMac() {
+				epMac[i] = b
+			}
+			localredirect.LocalRedirectMap.Update(
+				&localredirect.LocalRedirectKey{Id: uint64(localAddress)},
+				&localredirect.LocalRedirectInfo{IfIndex: uint16(e.GetIfIndex()), IfMac: epMac},
+			)
+		case "proxy":
+			log.WithField("redir-type", "proxy").Info("updating redir-proxy with interface %d", e.GetIfIndex())
+			var epMac types.MACAddr
+			for i, b := range e.LXCMac() {
+				epMac[i] = b
+			}
+			localredirect.LocalRedirectMap.Update(
+				&localredirect.LocalRedirectKey{Id: 42},
+				&localredirect.LocalRedirectInfo{IfIndex: uint16(e.GetIfIndex()), IfMac: epMac},
+			)
+		}
+		if delLabels["redir-type"].Value == "workload" {
+			localAddress := byteorder.Native.Uint32(e.IPv4.AsSlice())
+			log.WithField("redir-type", "workload").Info("Removing redir-workload with address %s(%d)", e.IPv4Address(), localAddress)
+			localredirect.LocalRedirectMap.Delete(
+				&localredirect.LocalRedirectKey{Id: uint64(localAddress)},
+			)
+		}
 	}
 	e.unlock()
 
@@ -1816,6 +1848,30 @@ func (e *Endpoint) UpdateLabels(ctx context.Context, identityLabels, infoLabels 
 
 	e.replaceInformationLabels(infoLabels)
 	// replace identity labels and update the identity if labels have changed
+	switch identityLabels["redir-type"].Value {
+	case "workload":
+		localAddress := byteorder.Native.Uint32(e.IPv4.AsSlice())
+		log.WithField("redir-type", "workload").Infof("updating redir-workload with address %s(%d)", e.IPv4Address(), localAddress)
+		var epMac types.MACAddr
+		for i, b := range e.LXCMac() {
+			epMac[i] = b
+		}
+		localredirect.LocalRedirectMap.Update(
+			&localredirect.LocalRedirectKey{Id: uint64(localAddress)},
+			&localredirect.LocalRedirectInfo{IfIndex: uint16(e.GetIfIndex()), IfMac: epMac},
+		)
+
+	case "proxy":
+		log.WithField("redir-type", "proxy").Infof("updating redir-proxy with interface %d", e.GetIfIndex())
+		var epMac types.MACAddr
+		for i, b := range e.LXCMac() {
+			epMac[i] = b
+		}
+		localredirect.LocalRedirectMap.Update(
+			&localredirect.LocalRedirectKey{Id: 42},
+			&localredirect.LocalRedirectInfo{IfIndex: uint16(e.GetIfIndex()), IfMac: epMac},
+		)
+	}
 	rev := e.replaceIdentityLabels(identityLabels)
 	e.unlock()
 	if rev != 0 {

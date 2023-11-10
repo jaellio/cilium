@@ -14,6 +14,8 @@ import (
 	"path/filepath"
 	"sync"
 
+	"github.com/cilium/cilium/pkg/byteorder"
+	"github.com/cilium/cilium/pkg/maps/localredirect"
 	"github.com/google/renameio/v2"
 	"github.com/sirupsen/logrus"
 	"github.com/vishvananda/netlink"
@@ -1001,6 +1003,12 @@ func (e *Endpoint) deleteMaps() []error {
 			errors = append(errors, fmt.Errorf("unable to remote endpoint from bandwidth manager map: %s", err))
 		}
 	}
+
+	// Remove localredirect map entries on endpoint delete as well.
+	localAddress := byteorder.Native.Uint32(e.IPv4.AsSlice())
+	localredirect.LocalRedirectMap.Delete(
+		&localredirect.LocalRedirectKey{Id: uint64(localAddress)},
+	)
 
 	return errors
 }

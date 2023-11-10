@@ -560,6 +560,34 @@ handle_ipv4(struct __ctx_buff *ctx, __u32 secctx __maybe_unused,
 	if (ipv4_is_fragment(ip4))
 		return DROP_FRAG_NOSUPPORT;
 #endif
+	if (ip4->protocol == IPPROTO_TCP) {
+		struct local_redirect_key redirect_key;
+		struct local_redirect_info *redirect_value;
+		__u32 ipv4;
+		ipv4 = ip4->daddr;
+		redirect_key.id = ip4->daddr;
+		redirect_value = map_lookup_elem(&LOCAL_REDIRECT_MAP, &redirect_key);
+		printk("handle host, lookup %pI4 %x: %d", &ipv4, ip4->daddr, redirect_value != 0);
+		if (redirect_value) {
+			redirect_key.id = 42;
+			redirect_value = map_lookup_elem(&LOCAL_REDIRECT_MAP, &redirect_key);
+		  printk("handle host match 1, lookup %pI4", &ipv4);
+			if (redirect_value) {
+				union macaddr destmac;
+				// apparently sizeof(destmac) evaluates to 8 instead of 6 for some reason,
+				// and the verifier kicks us out. Just fix the size at 6.
+				memcpy(&destmac.addr, redirect_value->ifmac, 6);
+				/* Rewrite to destination MAC */
+				if (eth_store_daddr(ctx, (__u8 *) &destmac.addr, 0) < 0)
+				 return send_drop_notify_error(ctx, SECLABEL, DROP_WRITE_ERROR,CTX_ACT_OK, METRIC_EGRESS);
+		    printk("handle host match 2 redirect, lookup %pI4", &ipv4);
+				return ctx_redirect(ctx, redirect_value->ifindex, 0);
+			} else {
+		    printk("handle host match drop sip, lookup %pI4", &ipv4);
+				return DROP_INVALID_SIP;
+			}
+		}
+	}
 
 #ifdef ENABLE_NODEPORT
 	if (!from_host) {
@@ -1185,6 +1213,7 @@ int cil_from_netdev(struct __ctx_buff *ctx)
 #endif
 	int ret;
 
+  printk("cil_from_netdev %d->%d, %pI4", ctx->ifindex, ctx->ingress_ifindex, &ctx->local_ip4);
 	/* Filter allowed vlan id's and pass them back to kernel.
 	 * We will see the packet again in from-netdev@eth0.vlanXXX.
 	 */
