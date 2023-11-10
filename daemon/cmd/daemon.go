@@ -786,6 +786,15 @@ func newDaemon(ctx context.Context, cleaner *daemonCleanup, params *daemonParams
 
 		params.NodeManager.Subscribe(params.WGAgent)
 	}
+	log.Infof("howardjohn: starting")
+	if params.HBONEAgent != nil {
+		log.Infof("howardjohn: starting HBONE agent")
+		if err := params.HBONEAgent.Init(d.ipcache, d.endpointManager); err != nil {
+			log.WithError(err).Error("failed to initialize hbone agent")
+			return nil, nil, fmt.Errorf("failed to initialize hbone agent: %w", err)
+		}
+		log.Infof("howardjohn: started HBONE agent")
+	}
 
 	// The kube-proxy replacement and host-fw devices detection should happen after
 	// establishing a connection to kube-apiserver, but before starting a k8s watcher.

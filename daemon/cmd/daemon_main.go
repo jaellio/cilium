@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/cilium/cilium/pkg/hbone"
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/asm"
 	"github.com/cilium/ebpf/rlimit"
@@ -1626,6 +1627,7 @@ type daemonParams struct {
 	Clientset            k8sClient.Clientset
 	Datapath             datapath.Datapath
 	WGAgent              *wireguard.Agent `optional:"true"`
+	HBONEAgent           *hbone.Agent     `optional:"true"`
 	LocalNodeStore       *node.LocalNodeStore
 	BGPController        *bgpv1.Controller
 	Shutdowner           hive.Shutdowner
@@ -1689,8 +1691,10 @@ func newDaemonPromise(params daemonParams) promise.Promise[*Daemon] {
 		OnStart: func(hive.HookContext) error {
 			d, restoredEndpoints, err := newDaemon(daemonCtx, cleaner, &params)
 			if err != nil {
+				log.Errorf("daemon creation failed: %v", err)
 				return fmt.Errorf("daemon creation failed: %w", err)
 			}
+			log.Errorf("daemon creation success: %v", err)
 			daemon = d
 
 			if !option.Config.DryMode {

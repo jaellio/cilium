@@ -710,6 +710,7 @@ enum metric_dir {
 #define MARK_MAGIC_IDENTITY		0x0F00 /* mark carries identity */
 #define MARK_MAGIC_TO_PROXY		0x0200
 #define MARK_MAGIC_SNAT_DONE		0x0300
+#define MARK_MAGIC_HBONE		0x0700
 
 #define MARK_MAGIC_KEY_MASK		0xFF00
 

@@ -1441,6 +1441,7 @@ int cil_to_host(struct __ctx_buff *ctx)
 	bool traced = false;
 	__u32 src_id = 0;
 	__s8 ext_err = 0;
+	printk("to host magic=%d,mark=%d", magic, ctx->mark);
 
 	if ((magic & 0xFFFF) == MARK_MAGIC_TO_PROXY) {
 		/* Upper 16 bits may carry proxy port number */
