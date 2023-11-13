@@ -142,6 +142,9 @@ func newWireguardAgent(lc hive.Lifecycle, localNodeStore *node.LocalNodeStore) *
 }
 
 func newHboneAgent(lc hive.Lifecycle) *hbone.Agent {
+	if !option.Config.EnableMutualTLS {
+		return nil
+	}
 	var agent *hbone.Agent
 	var err error
 	agent, err = hbone.NewAgent()

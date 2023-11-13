@@ -745,6 +745,9 @@ const (
 	// EnableWireguard is the name of the option to enable WireGuard
 	EnableWireguard = "enable-wireguard"
 
+	// EnableMutualTLS is the name of the option to enable MutualTLS
+	EnableMutualTLS = "enable-mutual-tls"
+
 	// EnableL2Announcements is the name of the option to enable l2 announcements
 	EnableL2Announcements = "enable-l2-announcements"
 
@@ -1703,6 +1706,9 @@ type DaemonConfig struct {
 
 	// EnableWireguard enables Wireguard encryption
 	EnableWireguard bool
+
+	// EnableMutualTLS enables mutual TLS encryption and authentication
+	EnableMutualTLS bool
 
 	// EnableEncryptionStrictMode enables strict mode for encryption
 	EnableEncryptionStrictMode bool
@@ -3030,6 +3036,7 @@ func (c *DaemonConfig) Populate(vp *viper.Viper) {
 	c.IPv6MCastDevice = vp.GetString(IPv6MCastDevice)
 	c.EnableIPSec = vp.GetBool(EnableIPSecName)
 	c.EnableWireguard = vp.GetBool(EnableWireguard)
+	c.EnableMutualTLS = vp.GetBool(EnableMutualTLS)
 	c.EnableL2Announcements = vp.GetBool(EnableL2Announcements)
 	c.L2AnnouncerLeaseDuration = vp.GetDuration(L2AnnouncerLeaseDuration)
 	c.L2AnnouncerRenewDeadline = vp.GetDuration(L2AnnouncerRenewDeadline)

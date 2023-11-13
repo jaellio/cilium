@@ -376,6 +376,9 @@ func InitGlobalFlags(cmd *cobra.Command, vp *viper.Viper) {
 	flags.Bool(option.EnableWireguard, false, "Enable WireGuard")
 	option.BindEnv(vp, option.EnableWireguard)
 
+	flags.Bool(option.EnableMutualTLS, true, "Enable Mutual TLS")
+	option.BindEnv(vp, option.EnableMutualTLS)
+
 	flags.Bool(option.EnableL2Announcements, false, "Enable L2 announcements")
 	option.BindEnv(vp, option.EnableL2Announcements)
 
