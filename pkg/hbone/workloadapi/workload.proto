@@ -17,6 +17,34 @@ syntax = "proto3";
 package istio.workload;
 option go_package="pkg/workloadapi";
 
+// Address represents a unique address.
+//
+// Address joins two sub-resources, Workload and Service, to support querying by IP address.
+// Address is intended to be able to be looked up on-demand, allowing a client
+// to answer a question like "what is this IP address", similar to a reverse DNS lookup.
+//
+// Each resource will have a mesh-wide unique opaque name, defined in the individual messages.
+// In addition, to support lookup by IP address, they will have *alias* names for each IP the resource represents.
+// There may be multiple aliases for the same resource (examples: service in multiple networks, or a dual-stack workload).
+// Aliases are keyed by network/IP address. Example: "default/1.2.3.4".
+//
+// In some cases, we do not know the IP address of a Workload. For instance, we may simply know
+// that there is a workload behind a gateway, and rely on the gateway to handle the rest.
+// In this case, the key format will be "resource-uid". The resource can be a Pod, WorkloadEntry, etc.
+// These resources cannot be looked up on-demand.
+//
+// In some cases, we do not know the IP address of a Service. These services cannot be used for matching
+// outbound traffic, as we only have L4 attributes to route based on. However,
+// they can be used for Gateways.
+// In this case, the key format will be "network/hostname".
+// These resources cannot be looked up on-demand.
+message Address {
+  oneof type {
+    // Workload represents an individual workload.
+    // This could be a single Pod, a VM instance, etc.
+    Workload workload = 1;
+  }
+}
 // Workload represents a workload - an endpoint (or collection behind a hostname).
 // The xds primary key is "uid" as defined on the workload below.
 // Secondary (alias) keys are the unique `network/IP` pairs that the workload can be reached at.

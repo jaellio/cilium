@@ -88,21 +88,29 @@ func (a *Agent) DeltaAggregatedResources(stream discovery.AggregatedDiscoverySer
 	return a.processRequestStream(streamLog, stream, reqCh)
 }
 
-const WorkloadType = "type.googleapis.com/istio.workload.Workload"
+const AddressType = "type.googleapis.com/istio.workload.Address"
 
 func (a *Agent) processRequestStream(streamLog *logrus.Entry, stream discovery.AggregatedDiscoveryService_DeltaAggregatedResourcesServer, ch chan *discovery.DeltaDiscoveryRequest) error {
 	version := 0
 	subs := sets.New[string]()
 	for {
 		version++
-		send := func(names []string) error {
+		send := func(req *discovery.DeltaDiscoveryRequest, names sets.Set[string]) error {
+			if req != nil && req.TypeUrl != AddressType {
+				streamLog.Infof("unknown type %v", req.TypeUrl)
+				return stream.Send(&discovery.DeltaDiscoveryResponse{
+					TypeUrl:           req.TypeUrl,
+					SystemVersionInfo: fmt.Sprint(version),
+					Nonce:             fmt.Sprint(version),
+				})
+			}
 			resp := &discovery.DeltaDiscoveryResponse{
-				TypeUrl:           WorkloadType,
+				TypeUrl:           AddressType,
 				SystemVersionInfo: fmt.Sprint(version),
 				Nonce:             fmt.Sprint(version),
 			}
 			// Push new additions
-			for _, name := range names {
+			for name := range names {
 				wl := a.buildWorkload(name)
 				if wl == nil {
 					resp.RemovedResources = append(resp.RemovedResources, name)
@@ -114,6 +122,7 @@ func (a *Agent) processRequestStream(streamLog *logrus.Entry, stream discovery.A
 					})
 				}
 			}
+			streamLog.Infof("send resp res=%v del=%v", len(resp.Resources), len(resp.RemovedResources))
 			return stream.Send(resp)
 		}
 		select {
@@ -121,14 +130,27 @@ func (a *Agent) processRequestStream(streamLog *logrus.Entry, stream discovery.A
 			if !ok {
 				return fmt.Errorf("done")
 			}
-			subs = subs.Insert(req.ResourceNamesSubscribe...).Delete(req.ResourceNamesUnsubscribe...)
+			subs = subs.Insert(req.ResourceNamesSubscribe...).
+				Delete(req.ResourceNamesUnsubscribe...)
+
+			if req.ResponseNonce != "" {
+				if req.ErrorDetail != nil {
+					errCode := codes.Code(req.ErrorDetail.Code)
+					streamLog.Errorf("ACK ERROR %s %s:%s", req.TypeUrl, errCode.String(), req.ErrorDetail.GetMessage())
+				} else {
+					streamLog.Infof("ACK %v", req.TypeUrl)
+				}
+				continue
+			}
+			toSend := sets.New(req.ResourceNamesSubscribe...).Delete("*") // TODO: for now we *only* handle on-demand. Support wildcard subscription too
 			// Push new additions
-			if err := send(req.ResourceNamesSubscribe); err != nil {
+			streamLog.Infof("got request for %v: %v", req.TypeUrl, subs)
+			if err := send(req, toSend); err != nil {
 				return err
 			}
 		case <-a.pushChannel:
 			// Push everything. TODO: incremental
-			if err := send(subs.UnsortedList()); err != nil {
+			if err := send(nil, subs); err != nil {
 				return err
 			}
 		case <-stream.Context().Done():
@@ -137,7 +159,8 @@ func (a *Agent) processRequestStream(streamLog *logrus.Entry, stream discovery.A
 	}
 }
 
-func (a *Agent) buildWorkload(raw string) *anypb.Any {
+func (a *Agent) buildWorkload(resource string) *anypb.Any {
+	_, raw, _ := strings.Cut(resource, "/")
 	ip, _ := netip.ParseAddr(raw)
 	meta := a.ipCache.GetK8sMetadata(ip)
 	if meta == nil {
@@ -159,7 +182,8 @@ func (a *Agent) buildWorkload(raw string) *anypb.Any {
 		wl.Namespace = meta.Namespace
 	}
 	wl.Uid = "Kubernetes" + "//" + "Pod/" + wl.Namespace + "/" + wl.Name
-	return toAny(wl)
+	addr := &workloadapi.Address{Type: &workloadapi.Address_Workload{Workload: wl}}
+	return toAny(addr)
 }
 
 func toAny(pb proto.Message) *anypb.Any {

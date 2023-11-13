@@ -23,7 +23,7 @@ var (
 )
 
 const (
-	listenPort = 15001
+	listenPort = 15010
 )
 
 // Agent needs to be initialized with Init(). In Init(), the Wireguard tunnel
