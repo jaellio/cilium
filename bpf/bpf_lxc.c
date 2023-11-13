@@ -1337,16 +1337,17 @@ static __always_inline int __tail_handle_ipv4(struct __ctx_buff *ctx,
 			if (redirect_value) {
 				union macaddr destmac;
 		    printk("match 2 lxc, lookup %pI4", &ipv4);
-				// apparently sizeof(destmac) evaluates to 8 instead of 6 for some reason,
-				// and the verifier kicks us out. Just fix the size at 6.
+//				// apparently sizeof(destmac) evaluates to 8 instead of 6 for some reason,
+//				// and the verifier kicks us out. Just fix the size at 6.
 				memcpy(&destmac.addr, redirect_value->ifmac, 6);
 				/* Rewrite to destination MAC */
 				if (eth_store_daddr(ctx, (__u8 *) &destmac.addr, 0) < 0) {
 		      printk("match drop redirect lxc, lookup %pI4", &ipv4);
 					return send_drop_notify_error(ctx, SECLABEL, DROP_WRITE_ERROR, CTX_ACT_OK, METRIC_EGRESS);
 				}
-		    printk("match 3 redirect lxc, lookup %pI4 to %d", &ipv4, redirect_value->ifindex);
+		    printk("match 3 redirect lxc, lookup %pI4 to %d (would %d)", &ipv4, redirect_value->ifindex, HBONE_IFINDEX);
 				return ctx_redirect(ctx, redirect_value->ifindex, 0);
+//				return ctx_redirect(ctx, HBONE_IFINDEX, 0);
 			} else {
         printk("match lxc drop SIP, lookup %pI4", &ipv4);
 				return DROP_INVALID_SIP;
@@ -1423,7 +1424,7 @@ int cil_from_container(struct __ctx_buff *ctx)
 	__u32 sec_label = SECLABEL;
 	int ret;
 
-  printk("cil_from_container %d-%d, %pI4", ctx->ifindex, ctx->ingress_ifindex, &ctx->local_ip4);
+//  printk("cil_from_container %d-%d, %pI4", ctx->ifindex, ctx->ingress_ifindex, &ctx->local_ip4);
 	bpf_clear_meta(ctx);
 	reset_queue_mapping(ctx);
 
@@ -1813,10 +1814,12 @@ ipv4_policy(struct __ctx_buff *ctx, struct iphdr *ip4, int ifindex, __u32 src_la
 	struct trace_ctx trace;
 	int ret, verdict, l4_off;
 	__u32 orig_sip;
+	__u32 dip;
 	__u8 policy_match_type = POLICY_MATCH_NONE;
 	__u8 audited = 0;
 	__u8 auth_type = 0;
 	__u32 zero = 0;
+	__u32 local_lxc = LXC_IPV4;
 
 	policy_clear_mark(ctx);
 
@@ -1825,36 +1828,7 @@ ipv4_policy(struct __ctx_buff *ctx, struct iphdr *ip4, int ifindex, __u32 src_la
 	 */
 	skip_ingress_proxy = tc_index_skip_ingress_proxy(ctx);
 
-	orig_sip = ip4->saddr;
-  printk("policy, lookup src %pI4/%x", &orig_sip, orig_sip);
-//	if (ip4->protocol == IPPROTO_TCP) {
-//		struct local_redirect_key redirect_key;
-//		struct local_redirect_info *redirect_value;
-//		__u32 ipv4;
-//		ipv4 = ip4->daddr;
-//		redirect_key.id = ip4->daddr;
-//		redirect_value = map_lookup_elem(&LOCAL_REDIRECT_MAP, &redirect_key);
-//		printk("handle policy, lookup %pI4 %x: %d", &ipv4, ip4->daddr, redirect_value != 0);
-//		if (redirect_value) {
-//			redirect_key.id = 42;
-//			redirect_value = map_lookup_elem(&LOCAL_REDIRECT_MAP, &redirect_key);
-//		  printk("handle policy 1, lookup %pI4", &ipv4);
-//			if (redirect_value) {
-//				union macaddr destmac;
-//				// apparently sizeof(destmac) evaluates to 8 instead of 6 for some reason,
-//				// and the verifier kicks us out. Just fix the size at 6.
-//				memcpy(&destmac.addr, redirect_value->ifmac, 6);
-//				/* Rewrite to destination MAC */
-//				if (eth_store_daddr(ctx, (__u8 *) &destmac.addr, 0) < 0)
-//				  return send_drop_notify_error(ctx, SECLABEL, DROP_WRITE_ERROR,CTX_ACT_OK, METRIC_EGRESS);
-//		    printk("handle policy 2 redirect, lookup %pI4", &ipv4);
-//				return ctx_redirect(ctx, redirect_value->ifindex, 0);;
-//			} else {
-//		    printk("handle policy drop sip, lookup %pI4", &ipv4);
-//				return DROP_INVALID_SIP;
-//			}
-//		}
-//	}
+
 #ifndef ENABLE_IPV4_FRAGMENTS
 	/* Indicate that this is a datagram fragment for which we cannot
 	 * retrieve L4 ports. Do not set flag if we support fragmentation.
@@ -1875,7 +1849,44 @@ ipv4_policy(struct __ctx_buff *ctx, struct iphdr *ip4, int ifindex, __u32 src_la
 	trace.reason = (enum trace_reason)ct_buffer->ret;
 	ret = ct_buffer->ret;
 	l4_off = ct_buffer->l4_off;
-
+	orig_sip = ip4->saddr;
+	dip = ip4->daddr;
+    printk("policy ret=%d flag=%d lxc=%pI4", ret, tuple->flags, &local_lxc);
+    printk("policy, lookup dst --  %pI4:%d", &tuple->saddr, bpf_ntohs(tuple->dport));
+    printk("policy, lookup src --  %pI4:%d",  &tuple->daddr, bpf_ntohs(tuple->sport));
+	if (ip4->protocol == IPPROTO_TCP && ((tuple->flags == TUPLE_F_IN && bpf_ntohs(tuple->dport) == 15008) || (tuple->flags == TUPLE_F_OUT && bpf_ntohs(tuple->sport) == 15008))) {
+		struct local_redirect_key redirect_key;
+		struct local_redirect_info *redirect_value;
+		__u32 ipv4;
+		// Address is backwards!!! Warning
+//        printk("policy ret=%d, lookup dst --  %pI4:%d", ret, &tuple->saddr, bpf_ntohs(tuple->dport));
+//        printk("policy, lookup src --  %pI4:%d",  &tuple->daddr, bpf_ntohs(tuple->sport));
+		ipv4 = tuple->saddr;
+		if (tuple->flags == TUPLE_F_OUT) {
+		    ipv4 = tuple->daddr;
+		}
+		redirect_key.id = ipv4;
+		redirect_value = map_lookup_elem(&LOCAL_REDIRECT_MAP, &redirect_key);
+		printk("handle policy, lookup %pI4 %x: %d", &ipv4, ipv4, redirect_value != 0);
+		if (redirect_value) {
+			redirect_key.id = 42;
+			redirect_value = map_lookup_elem(&LOCAL_REDIRECT_MAP, &redirect_key);
+			if (redirect_value) {
+				union macaddr destmac;
+				// apparently sizeof(destmac) evaluates to 8 instead of 6 for some reason,
+				// and the verifier kicks us out. Just fix the size at 6.
+				memcpy(&destmac.addr, redirect_value->ifmac, 6);
+				/* Rewrite to destination MAC */
+				if (eth_store_daddr(ctx, (__u8 *) &destmac.addr, 0) < 0)
+				  return send_drop_notify_error(ctx, SECLABEL, DROP_WRITE_ERROR,CTX_ACT_OK, METRIC_EGRESS);
+		    printk("handle policy 2 redirect ingress, redirect to %d", redirect_value->ifindex);
+				return ctx_redirect(ctx, redirect_value->ifindex, 0);
+			} else {
+		    printk("handle policy drop sip, lookup %pI4", &ipv4);
+				return DROP_INVALID_SIP;
+			}
+		}
+	}
 	/* Check it this is return traffic to an egress proxy.
 	 * Do not redirect again if the packet is coming from the egress proxy.
 	 * Always redirect connections that originated from L7 LB.
@@ -2253,6 +2264,7 @@ int tail_ipv4_to_endpoint(struct __ctx_buff *ctx)
 	default:
 		break;
 	}
+
 out:
 	if (IS_ERR(ret))
 		return send_drop_notify_ext(ctx, src_sec_identity, SECLABEL_IPV4, LXC_ID,
@@ -2308,9 +2320,9 @@ int handle_policy(struct __ctx_buff *ctx)
 		ret = DROP_UNSUPPORTED_L2;
 		goto out;
 	}
-  printk("handle_policy %d, %pI4n, %pI4n", ctx->ifindex, &ctx->local_ip4, &ctx->remote_ip4);
-  printk("handle_policy %d, %pI4h, %pI4h", ctx->ifindex, &ctx->local_ip4, &ctx->remote_ip4);
-  printk("handle_policy %d, %d", ctx->ifindex, src_label);
+//  printk("handle_policy %d, %pI4n, %pI4n", ctx->ifindex, &ctx->local_ip4, &ctx->remote_ip4);
+//  printk("handle_policy %d, %pI4h, %pI4h", ctx->ifindex, &ctx->local_ip4, &ctx->remote_ip4);
+//  printk("handle_policy %d, %d", ctx->ifindex, src_label);
 
 	switch (proto) {
 #ifdef ENABLE_IPV6
